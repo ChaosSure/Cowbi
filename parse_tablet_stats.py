@@ -69,20 +69,15 @@ def fetch_html(url):
         return response.read().decode("utf-8", errors="replace")
 
 
-def normalize_description(text):
-    """Keep the complete <td> as one modifier.
-
-    PoE2DB uses <br> inside some Tower modifier descriptions. Those line
-    breaks are part of the same modifier, not separate mods.
-    """
+def split_description_parts(text):
+    """Return the real Trade-stat clauses inside one PoE2DB Tower row."""
     text = clean_text(text)
     parts = [p.strip() for p in text.split("\n") if p.strip()]
-    parts = [
-        p for p in parts
-        if not re.fullmatch(r"[a-z0-9_ +%.-]+\[\d+\]", p, flags=re.I)
-    ]
-    return clean_text(" ".join(parts))
+    return [p for p in parts if not re.fullmatch(r"[a-z0-9_ +%.-]+\[\d+\]", p, flags=re.I)]
 
+
+def normalize_description(text):
+    return clean_text(" ".join(split_description_parts(text)))
 
 def extract_tower_rows(html):
     parser = TableParser()
@@ -99,46 +94,49 @@ def extract_tower_rows(html):
         generation_type = "Prefix" if kind_raw in {"prefix", "前缀"} else "Suffix"
         # One HTML <tr> is one Tower modifier. Some descriptions contain
         # <br>, but those are continuation lines of the same modifier.
-        description = normalize_description(" ".join(cells[2:]))
+        raw_description = "\n".join(cells[2:])
+        parts = split_description_parts(raw_description)
+        description = clean_text(" ".join(parts))
         if description:
             rows.append({
                 "level": 1,
                 "generation_type": generation_type,
                 "text": description,
+                "parts": parts,
             })
     return rows
 
 
 def norm_trade_text(value):
-    s = clean_text(value).lower()
-    s = s.replace(" %", "%")
-    s = s.replace("#", "#")
+    s = clean_text(value).lower().replace(" %", "%")
     s = re.sub(r"\([^)]*\)", "#", s)
-    s = re.sub(r"\b(?:an|1)\s+additional\b", "# additional", s)
-    s = re.sub(r"\badditional\b", "# additional", s)
-    s = re.sub(r"\b(?:map|area)\b", "area", s)
-
-    # PoE2DB and Trade use slightly different pluralisation for these nouns.
-    plural_map = {
-        "circles": "circle", "exiles": "exile", "spirits": "spirit",
-        "essences": "essence", "shrines": "shrine", "strongboxes": "strongbox",
-        "abysses": "abyss", "breaches": "breach", "monsters": "monster",
-        "chests": "chest", "rewards": "reward", "modifiers": "modifier",
-        "waystones": "waystone", "mirrors": "mirror", "shards": "shard",
-        "bosses": "boss", "players": "player", "favours": "favour",
-        "omens": "omen", "beacons": "beacon", "crystals": "crystal",
-        "packs": "pack", "remnants": "remnant", "relics": "relic",
-        "sentires": "sentire", "sentries": "sentry",
-    }
-    for a, b in plural_map.items():
-        s = re.sub(rf"\b{re.escape(a)}\b", b, s)
-
-    # Trade sometimes uses '#' where PoE2DB has a literal fixed value.
-    s = re.sub(r"\b1\s+extra\b", "# extra", s)
     s = re.sub(r"\b1\s+additional\b", "# additional", s)
-    s = re.sub(r"\s+", " ", s).strip()
-    return s
+    s = re.sub(r"\b1\s+extra\b", "# extra", s)
+    plural_map = {
+        "circles":"circle","exiles":"exile","spirits":"spirit","essences":"essence",
+        "shrines":"shrine","strongboxes":"strongbox","abysses":"abyss","breaches":"breach",
+        "monsters":"monster","chests":"chest","rewards":"reward","modifiers":"modifier",
+        "waystones":"waystone","mirrors":"mirror","shards":"shard","bosses":"boss",
+        "players":"player","favours":"favour","omens":"omen","beacons":"beacon",
+        "crystals":"crystal","packs":"pack","remnants":"remnant","relics":"relic",
+        "sentries":"sentry",
+    }
+    for src, dst in plural_map.items():
+        s = re.sub(rf"\b{re.escape(src)}\b", dst, s)
+    return re.sub(r"\s+", " ", s).strip()
 
+
+def matching_variants(value):
+    base = norm_trade_text(value)
+    variants = [base, base.replace(" reduced ", " increased "), base.replace(" slower", " faster ")]
+    variants.append(re.sub(r"\b#\s+(?=vaal relic\b)", "1 ", base))
+    variants.append(re.sub(r"\b#\s+(?=buried strongbox\b)", "1 ", base))
+    variants.append(re.sub(
+        r"the first # unearthed runic monster will be rare monster",
+        "the first unearthed runic monster will be a rare monster",
+        base,
+    ))
+    return list(dict.fromkeys(variants))
 
 def load_trade_entries(path):
     with path.open(encoding="utf-8") as f:
@@ -163,17 +161,16 @@ def load_trade_entries(path):
 
 
 def resolve_trade_id(poedb_text, entries):
-    target = norm_trade_text(poedb_text)
-    exact = [e for e in entries if e["_norm"] == target]
-    # Duplicate texts are normally Area/Map aliases sharing the same stat ID.
-    if exact:
+    targets = matching_variants(poedb_text)
+    for target in targets:
+        exact = [e for e in entries if e["_norm"] == target]
         ids = {e["id"] for e in exact}
         if len(ids) == 1:
             return exact[0], "normalized-exact"
 
-    # Fallback: token containment, but only when it resolves to one stat ID.
-    candidates = []
+    target = targets[0]
     target_tokens = set(re.findall(r"[a-z0-9+#]+", target))
+    candidates = []
     for e in entries:
         et = e["_norm"]
         etokens = set(re.findall(r"[a-z0-9+#]+", et))
@@ -182,15 +179,26 @@ def resolve_trade_id(poedb_text, entries):
         overlap = len(target_tokens & etokens)
         coverage = overlap / max(1, min(len(target_tokens), len(etokens)))
         if (target in et or et in target) and coverage >= 0.90:
-            candidates.append((coverage, e))
-    candidates.sort(key=lambda x: x[0], reverse=True)
+            candidates.append((coverage, len(etokens), e))
+    candidates.sort(key=lambda x: (x[0], x[1]), reverse=True)
     if candidates:
-        best = candidates[0][0]
-        best_ids = {e["id"] for score, e in candidates if score == best}
-        if len(best_ids) == 1:
-            return candidates[0][1], "contains"
+        best_score = candidates[0][0]
+        best = [x for x in candidates if x[0] == best_score]
+        if len({x[2]["id"] for x in best}) == 1:
+            return best[0][2], "contains"
     return None, "unmatched" if not candidates else "ambiguous"
 
+
+def resolve_trade_clauses(parts, entries):
+    matches, failures, methods = [], [], []
+    for part in parts:
+        match, method = resolve_trade_id(part, entries)
+        if match:
+            matches.append(match)
+            methods.append(method)
+        else:
+            failures.append({"text": part, "method": method})
+    return matches, failures, methods
 
 def pair_rows(en_rows, cn_rows):
     if len(en_rows) != len(cn_rows):
@@ -237,25 +245,43 @@ def main():
     trade_entries = load_trade_entries(trade_path)
 
     mods, unmatched, ambiguous = [], [], []
+    resolved_count = 0
     for row in tower_rows:
-        match, method = resolve_trade_id(row["text_en"], trade_entries)
+        parts = row.get("parts", [row["text_en"]])
+        matches, failures, methods = resolve_trade_clauses(parts, trade_entries)
+        trade_ids = list(dict.fromkeys(m["id"] for m in matches))
+        clauses = []
+        mi = 0
+        for part in parts:
+            if mi < len(matches) and not failures:
+                match = matches[mi]
+                clauses.append({
+                    "poedb_text": part,
+                    "trade_stat_id": match["id"],
+                    "trade_text": match["text"],
+                    "trade_group": match.get("group", ""),
+                    "match_method": methods[mi],
+                })
+                mi += 1
         item = {
             "index": row["index"],
-            "trade_stat_id": match["id"] if match else None,
+            "trade_stat_id": trade_ids[0] if len(trade_ids) == 1 else None,
+            "trade_stat_ids": trade_ids,
             "text_en": row["text_en"],
             "text_zh": row["text_zh"],
             "generation_type": row["generation_type"],
             "poedb_source": POE2DB_EN,
             "poedb_cn_source": POE2DB_CN,
-            "match_method": method,
+            "match_method": methods[0] if len(methods) == 1 else "multi-clause",
+            "trade_clauses": clauses,
         }
-        if match:
-            item["trade_group"] = match.get("group", "")
-            item["trade_text"] = match["text"]
-        elif method == "ambiguous":
-            ambiguous.append(row)
+        if not failures:
+            resolved_count += 1
         else:
-            unmatched.append(row)
+            for failure in failures:
+                failed = dict(row)
+                failed["failed_clause"] = failure["text"]
+                (ambiguous if failure["method"] == "ambiguous" else unmatched).append(failed)
         mods.append(item)
 
     output = {
@@ -268,7 +294,7 @@ def main():
         "domain": "Tower",
         "expected_count": 90,
         "count": len(mods),
-        "matched_count": sum(1 for x in mods if x["trade_stat_id"]),
+        "matched_count": resolved_count,
         "unmatched_count": len(unmatched),
         "ambiguous_count": len(ambiguous),
         "mods": mods,
@@ -302,13 +328,13 @@ def main():
 
     print(f"PoE2DB Tower Mods: {len(tower_rows)}/90")
     print(f"Trade entries: {len(trade_entries)}")
-    print(f"Trade IDs matched: {output['matched_count']}/90")
+    print(f"Trade modifiers fully matched: {output['matched_count']}/90")
     print(f"Unmatched: {len(unmatched)}")
     print(f"Ambiguous: {len(ambiguous)}")
     for row in unmatched:
-        print("UNMATCHED:", row["index"], row["text_en"])
+        print("UNMATCHED:", row["index"], row["failed_clause"])
     for row in ambiguous:
-        print("AMBIGUOUS:", row["index"], row["text_en"])
+        print("AMBIGUOUS:", row["index"], row["failed_clause"])
 
     if unmatched or ambiguous:
         raise SystemExit(1)
