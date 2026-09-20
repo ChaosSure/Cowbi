@@ -1,0 +1,89 @@
+{
+  "version": 1,
+  "updated_at": "2026-09-20T03:52:47.336304+00:00",
+  "datasets": {
+    "stats": {
+      "file": "data\\poe2_stats.json",
+      "url": "https://www.pathofexile.com/api/trade2/data/stats",
+      "status": "ok",
+      "checked_at": "2026-09-20T03:52:43.700277+00:00",
+      "http_status": 200,
+      "etag": null,
+      "last_modified": "Sun, 20 Sep 2026 03:45:11 GMT",
+      "summary": {
+        "type": "dict",
+        "keys": [
+          "result"
+        ],
+        "result_count": 10,
+        "first_result_keys": [
+          "id",
+          "label",
+          "entries"
+        ]
+      }
+    },
+    "items": {
+      "file": "data\\poe2_items.json",
+      "url": "https://www.pathofexile.com/api/trade2/data/items",
+      "status": "ok",
+      "checked_at": "2026-09-20T03:52:44.974294+00:00",
+      "http_status": 200,
+      "etag": null,
+      "last_modified": "Sun, 20 Sep 2026 03:50:06 GMT",
+      "summary": {
+        "type": "dict",
+        "keys": [
+          "result"
+        ],
+        "result_count": 10,
+        "first_result_keys": [
+          "id",
+          "label",
+          "entries"
+        ]
+      }
+    },
+    "filters": {
+      "file": "data\\poe2_filters.json",
+      "url": "https://www.pathofexile.com/api/trade2/data/filters",
+      "status": "ok",
+      "checked_at": "2026-09-20T03:52:46.076094+00:00",
+      "http_status": 200,
+      "etag": null,
+      "last_modified": "Sun, 20 Sep 2026 03:34:59 GMT",
+      "summary": {
+        "type": "dict",
+        "keys": [
+          "result"
+        ],
+        "result_count": 7,
+        "first_result_keys": [
+          "id",
+          "filters"
+        ]
+      }
+    },
+    "leagues": {
+      "file": "data\\poe2_leagues.json",
+      "url": "https://www.pathofexile.com/api/trade2/data/leagues",
+      "status": "ok",
+      "checked_at": "2026-09-20T03:52:47.334944+00:00",
+      "http_status": 200,
+      "etag": null,
+      "last_modified": "Sun, 20 Sep 2026 01:56:17 GMT",
+      "summary": {
+        "type": "dict",
+        "keys": [
+          "result"
+        ],
+        "result_count": 6,
+        "first_result_keys": [
+          "id",
+          "realm",
+          "text"
+        ]
+      }
+    }
+  }
+}
