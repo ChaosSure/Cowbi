@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Build Cowbi's Tablet/Tower modifier catalog directly from PoE2DB, then resolve Trade stat IDs."""
+"""Build Cowbi's Tablet/Tower modifier catalog directly from PoE2DB and resolve Trade stat IDs."""
 import argparse, json, re
 from html.parser import HTMLParser
 from pathlib import Path
@@ -18,7 +18,7 @@ POE2DB_CN = "https://poe2db.tw/cn/Tablet"
 
 
 class TableParser(HTMLParser):
-    """Collect table rows while preserving each cell's text."""
+    """Collect table rows and preserve <br> boundaries inside cells."""
     def __init__(self):
         super().__init__(convert_charrefs=True)
         self.rows = []
@@ -27,19 +27,23 @@ class TableParser(HTMLParser):
         self._buf = []
 
     def handle_starttag(self, tag, attrs):
+        tag = tag.lower()
         if tag == "tr":
             self._row = []
         elif tag == "td" and self._row is not None:
             self._cell = []
             self._buf = []
+        elif tag == "br" and self._cell is not None:
+            self._cell.append("\n")
 
     def handle_data(self, data):
         if self._cell is not None:
             self._cell.append(data)
 
     def handle_endtag(self, tag):
+        tag = tag.lower()
         if tag == "td" and self._row is not None and self._cell is not None:
-            self._row.append(clean_text(" ".join(self._cell)))
+            self._row.append(clean_text("".join(self._cell)))
             self._cell = None
             self._buf = []
         elif tag == "tr" and self._row is not None:
@@ -49,19 +53,34 @@ class TableParser(HTMLParser):
 
 
 def clean_text(value):
-    value = re.sub(r"\s+", " ", value or "").strip()
-    return value.replace("—", "-").replace("–", "-").replace("\xa0", " ")
+    value = re.sub(r"[ \t\r\f\v]+", " ", value or "")
+    value = re.sub(r" *\n+ *", "\n", value)
+    return value.strip().replace("—", "-").replace("–", "-").replace("\xa0", " ")
 
 
 def fetch_html(url):
     req = Request(
         url,
         headers={
-            "User-Agent": "Cowbi-Tablet-Parser/1.0 (+https://github.com/ChaosSure/Cowbi)"
+            "User-Agent": "Cowbi-Tablet-Parser/2.0 (+https://github.com/ChaosSure/Cowbi)"
         },
     )
     with urlopen(req, timeout=30) as response:
         return response.read().decode("utf-8", errors="replace")
+
+
+def split_description(text):
+    parts = [clean_text(x) for x in text.split("\n")]
+    out = []
+    for part in parts:
+        if not part:
+            continue
+        # PoE2DB occasionally exposes a raw internal stat helper after a
+        # <br>; it is not a separate modifier.
+        if re.fullmatch(r"[a-z0-9_ +%.-]+\[\d+\]", part, flags=re.I):
+            continue
+        out.append(part)
+    return out
 
 
 def extract_tower_rows(html):
@@ -72,22 +91,49 @@ def extract_tower_rows(html):
     for cells in parser.rows:
         if len(cells) < 3:
             continue
-        level, kind = cells[0].strip(), cells[1].strip().lower()
-        # PoE2DB uses English "Prefix/Suffix" on /Tablet but Chinese
-        # "前缀/后缀" on /cn/Tablet.
-        if level == "1" and kind in {"prefix", "suffix", "前缀", "后缀"}:
-            rows.append({
-                "level": 1,
-                "generation_type": "Prefix" if kind in {"prefix", "前缀"} else "Suffix",
-                "text": clean_text(" ".join(cells[2:])),
-            })
+        level = cells[0].strip()
+        kind_raw = cells[1].strip().lower()
+        if level != "1" or kind_raw not in {"prefix", "suffix", "前缀", "后缀"}:
+            continue
+        generation_type = "Prefix" if kind_raw in {"prefix", "前缀"} else "Suffix"
+        for cell in cells[2:]:
+            for text in split_description(cell):
+                rows.append({
+                    "level": 1,
+                    "generation_type": generation_type,
+                    "text": text,
+                })
     return rows
 
 
 def norm_trade_text(value):
     s = clean_text(value).lower()
     s = s.replace(" %", "%")
-    s = re.sub(r"\s+", " ", s)
+    s = s.replace("#", "#")
+    s = re.sub(r"\([^)]*\)", "#", s)
+    s = re.sub(r"\b(?:an|1)\s+additional\b", "# additional", s)
+    s = re.sub(r"\badditional\b", "# additional", s)
+    s = re.sub(r"\b(?:map|area)\b", "area", s)
+
+    # PoE2DB and Trade use slightly different pluralisation for these nouns.
+    plural_map = {
+        "circles": "circle", "exiles": "exile", "spirits": "spirit",
+        "essences": "essence", "shrines": "shrine", "strongboxes": "strongbox",
+        "abysses": "abyss", "breaches": "breach", "monsters": "monster",
+        "chests": "chest", "rewards": "reward", "modifiers": "modifier",
+        "waystones": "waystone", "mirrors": "mirror", "shards": "shard",
+        "bosses": "boss", "players": "player", "favours": "favour",
+        "omens": "omen", "beacons": "beacon", "crystals": "crystal",
+        "packs": "pack", "remnants": "remnant", "relics": "relic",
+        "sentires": "sentire", "sentries": "sentry",
+    }
+    for a, b in plural_map.items():
+        s = re.sub(rf"\b{re.escape(a)}\b", b, s)
+
+    # Trade sometimes uses '#' where PoE2DB has a literal fixed value.
+    s = re.sub(r"\b1\s+extra\b", "# extra", s)
+    s = re.sub(r"\b1\s+additional\b", "# additional", s)
+    s = re.sub(r"\s+", " ", s).strip()
     return s
 
 
@@ -115,22 +161,31 @@ def load_trade_entries(path):
 
 def resolve_trade_id(poedb_text, entries):
     target = norm_trade_text(poedb_text)
-
     exact = [e for e in entries if e["_norm"] == target]
-    if len(exact) == 1:
-        return exact[0], "exact"
+    # Duplicate texts are normally Area/Map aliases sharing the same stat ID.
+    if exact:
+        ids = {e["id"] for e in exact}
+        if len(ids) == 1:
+            return exact[0], "normalized-exact"
 
-    # PoE2DB occasionally renders an inline link or punctuation slightly
-    # differently from Trade. Only accept a unique containment match.
+    # Fallback: token containment, but only when it resolves to one stat ID.
     candidates = []
+    target_tokens = set(re.findall(r"[a-z0-9+#]+", target))
     for e in entries:
-        a, b = target, e["_norm"]
-        if a in b or b in a:
-            candidates.append(e)
-
-    if len(candidates) == 1:
-        return candidates[0], "contains"
-
+        et = e["_norm"]
+        etokens = set(re.findall(r"[a-z0-9+#]+", et))
+        if not target_tokens or not etokens:
+            continue
+        overlap = len(target_tokens & etokens)
+        coverage = overlap / max(1, min(len(target_tokens), len(etokens)))
+        if (target in et or et in target) and coverage >= 0.90:
+            candidates.append((coverage, e))
+    candidates.sort(key=lambda x: x[0], reverse=True)
+    if candidates:
+        best = candidates[0][0]
+        best_ids = {e["id"] for score, e in candidates if score == best}
+        if len(best_ids) == 1:
+            return candidates[0][1], "contains"
     return None, "unmatched" if not candidates else "ambiguous"
 
 
@@ -139,7 +194,6 @@ def pair_rows(en_rows, cn_rows):
         raise RuntimeError(
             f"PoE2DB EN/CN Tower row count differs: EN={len(en_rows)} CN={len(cn_rows)}"
         )
-
     result = []
     for i, (en, cn) in enumerate(zip(en_rows, cn_rows), start=1):
         if en["generation_type"] != cn["generation_type"]:
@@ -166,12 +220,10 @@ def main():
         raise SystemExit(f"ERROR: missing Trade stats file: {trade_path}")
 
     print("Fetching PoE2DB:", POE2DB_EN)
-    en_html = fetch_html(POE2DB_EN)
+    en_rows = extract_tower_rows(fetch_html(POE2DB_EN))
     print("Fetching PoE2DB:", POE2DB_CN)
-    cn_html = fetch_html(POE2DB_CN)
-
-    en_rows = extract_tower_rows(en_html)
-    cn_rows = extract_tower_rows(cn_html)
+    cn_rows = extract_tower_rows(fetch_html(POE2DB_CN))
+    print(f"Parsed PoE2DB rows: EN={len(en_rows)} CN={len(cn_rows)}")
 
     if len(en_rows) != 90 or len(cn_rows) != 90:
         raise RuntimeError(
@@ -181,10 +233,7 @@ def main():
     tower_rows = pair_rows(en_rows, cn_rows)
     trade_entries = load_trade_entries(trade_path)
 
-    mods = []
-    unmatched = []
-    ambiguous = []
-
+    mods, unmatched, ambiguous = [], [], []
     for row in tower_rows:
         match, method = resolve_trade_id(row["text_en"], trade_entries)
         item = {
@@ -200,15 +249,14 @@ def main():
         if match:
             item["trade_group"] = match.get("group", "")
             item["trade_text"] = match["text"]
+        elif method == "ambiguous":
+            ambiguous.append(row)
         else:
-            if method == "ambiguous":
-                ambiguous.append(row)
-            else:
-                unmatched.append(row)
+            unmatched.append(row)
         mods.append(item)
 
     output = {
-        "version": 3,
+        "version": 4,
         "source": {
             "poedb_en": POE2DB_EN,
             "poedb_cn": POE2DB_CN,
@@ -222,54 +270,45 @@ def main():
         "ambiguous_count": len(ambiguous),
         "mods": mods,
     }
-
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", encoding="utf-8") as f:
         json.dump(output, f, ensure_ascii=False, indent=2)
 
-    summary = {
-        "version": 3,
-        "source": "PoE2DB Precursor Tower Mods /90 + PoE2 Trade stats",
-        "poedb_en_rows": len(en_rows),
-        "poedb_cn_rows": len(cn_rows),
-        "expected": 90,
-        "matched": output["matched_count"],
-        "unmatched": output["unmatched_count"],
-        "ambiguous": output["ambiguous_count"],
-        "status": "PASS" if output["matched_count"] == 90 else "FAIL",
-        "unmatched_text": [x["text_en"] for x in unmatched],
-        "ambiguous_text": [x["text_en"] for x in ambiguous],
-    }
-
     with SUMMARY.open("w", encoding="utf-8") as f:
-        json.dump(summary, f, ensure_ascii=False, indent=2)
+        json.dump({
+            "version": 4,
+            "source": "PoE2DB Precursor Tower Mods /90 + PoE2 Trade stats",
+            "poedb_en_rows": len(en_rows),
+            "poedb_cn_rows": len(cn_rows),
+            "expected": 90,
+            "matched": output["matched_count"],
+            "unmatched": len(unmatched),
+            "ambiguous": len(ambiguous),
+            "status": "PASS" if output["matched_count"] == 90 else "FAIL",
+            "unmatched_text": [x["text_en"] for x in unmatched],
+            "ambiguous_text": [x["text_en"] for x in ambiguous],
+        }, f, ensure_ascii=False, indent=2)
 
     with CATALOG.open("w", encoding="utf-8") as f:
-        json.dump(
-            {
-                "version": 3,
-                "source": "PoE2DB",
-                "count": len(tower_rows),
-                "rows": tower_rows,
-            },
-            f,
-            ensure_ascii=False,
-            indent=2,
-        )
+        json.dump({
+            "version": 4,
+            "source": "PoE2DB",
+            "count": len(tower_rows),
+            "rows": tower_rows,
+        }, f, ensure_ascii=False, indent=2)
 
     print(f"PoE2DB Tower Mods: {len(tower_rows)}/90")
     print(f"Trade entries: {len(trade_entries)}")
     print(f"Trade IDs matched: {output['matched_count']}/90")
-    print(f"Unmatched: {output['unmatched_count']}")
-    print(f"Ambiguous: {output['ambiguous_count']}")
+    print(f"Unmatched: {len(unmatched)}")
+    print(f"Ambiguous: {len(ambiguous)}")
+    for row in unmatched:
+        print("UNMATCHED:", row["index"], row["text_en"])
+    for row in ambiguous:
+        print("AMBIGUOUS:", row["index"], row["text_en"])
 
     if unmatched or ambiguous:
-        for row in unmatched:
-            print("UNMATCHED:", row["index"], row["text_en"])
-        for row in ambiguous:
-            print("AMBIGUOUS:", row["index"], row["text_en"])
         raise SystemExit(1)
-
     print("STATUS: PASS")
 
 
