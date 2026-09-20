@@ -69,18 +69,19 @@ def fetch_html(url):
         return response.read().decode("utf-8", errors="replace")
 
 
-def split_description(text):
-    parts = [clean_text(x) for x in text.split("\n")]
-    out = []
-    for part in parts:
-        if not part:
-            continue
-        # PoE2DB occasionally exposes a raw internal stat helper after a
-        # <br>; it is not a separate modifier.
-        if re.fullmatch(r"[a-z0-9_ +%.-]+\[\d+\]", part, flags=re.I):
-            continue
-        out.append(part)
-    return out
+def normalize_description(text):
+    """Keep the complete <td> as one modifier.
+
+    PoE2DB uses <br> inside some Tower modifier descriptions. Those line
+    breaks are part of the same modifier, not separate mods.
+    """
+    text = clean_text(text)
+    parts = [p.strip() for p in text.split("\n") if p.strip()]
+    parts = [
+        p for p in parts
+        if not re.fullmatch(r"[a-z0-9_ +%.-]+\[\d+\]", p, flags=re.I)
+    ]
+    return clean_text(" ".join(parts))
 
 
 def extract_tower_rows(html):
@@ -96,13 +97,15 @@ def extract_tower_rows(html):
         if level != "1" or kind_raw not in {"prefix", "suffix", "前缀", "后缀"}:
             continue
         generation_type = "Prefix" if kind_raw in {"prefix", "前缀"} else "Suffix"
-        for cell in cells[2:]:
-            for text in split_description(cell):
-                rows.append({
-                    "level": 1,
-                    "generation_type": generation_type,
-                    "text": text,
-                })
+        # One HTML <tr> is one Tower modifier. Some descriptions contain
+        # <br>, but those are continuation lines of the same modifier.
+        description = normalize_description(" ".join(cells[2:]))
+        if description:
+            rows.append({
+                "level": 1,
+                "generation_type": generation_type,
+                "text": description,
+            })
     return rows
 
 
