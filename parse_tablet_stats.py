@@ -73,10 +73,12 @@ def extract_tower_rows(html):
         if len(cells) < 3:
             continue
         level, kind = cells[0].strip(), cells[1].strip().lower()
-        if level == "1" and kind in {"prefix", "suffix"}:
+        # PoE2DB uses English "Prefix/Suffix" on /Tablet but Chinese
+        # "前缀/后缀" on /cn/Tablet.
+        if level == "1" and kind in {"prefix", "suffix", "前缀", "后缀"}:
             rows.append({
                 "level": 1,
-                "generation_type": "Prefix" if kind == "prefix" else "Suffix",
+                "generation_type": "Prefix" if kind in {"prefix", "前缀"} else "Suffix",
                 "text": clean_text(" ".join(cells[2:])),
             })
     return rows
