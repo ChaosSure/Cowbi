@@ -1,240 +1,59 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Extract PoE2 Tablet-related Trade stats from data/poe2_stats.json.
-
-Input:
-  data/poe2_stats.json
-
-Output:
-  data/tablet_stats.json
-  data/tablet_stats_summary.json
-
-The official /api/trade2/data/stats response is grouped as:
-  {"result": [{"label": "...", "entries": [...]}]}
-
-This script intentionally keeps the original Trade stat IDs and does not
-invent IDs. Tablet detection is heuristic and records the matched keywords
-so the result can be audited/refined later.
-"""
-
-from __future__ import annotations
-
-import argparse
-import json
-import re
+"""Resolve PoE2 Tablet/Tower modifier descriptions to official Trade stat IDs."""
+import argparse,json,re
 from pathlib import Path
-from typing import Any
+BASE=Path(__file__).resolve().parent; DATA=BASE/"data"
+INPUT=DATA/"poe2_stats.json"; OUTPUT=DATA/"tablet_stats.json"; SUMMARY=DATA/"tablet_stats_summary.json"; CATALOG=DATA/"tablet_stat_text_catalog.json"
 
-BASE_DIR = Path(__file__).resolve().parent
-DATA_DIR = BASE_DIR / "data"
-INPUT = DATA_DIR / "poe2_stats.json"
-OUTPUT = DATA_DIR / "tablet_stats.json"
-SUMMARY = DATA_DIR / "tablet_stats_summary.json"
-
-# Keep this list broad for discovery. We will refine it after inspecting the
-# extracted result rather than silently dropping possible tablet modifiers.
-KEYWORDS = (
-    "tablet",
-    "precursor tablet",
-    "precursor",
-    "area contains",
-    "map",
-    "waystone",
-    "expedition",
-    "ritual",
-    "breach",
-    "delirium",
-    "abyss",
-    "strongbox",
-    "boss",
-    "rare monsters",
-    "magic monsters",
-    "pack size",
-    "quantity of items",
-    "rarity of items",
-)
-
-# Common stat categories. We preserve the upstream group label verbatim.
-CATEGORY_HINTS = {
-    "explicit": re.compile(r"explicit", re.I),
-    "implicit": re.compile(r"implicit", re.I),
-    "enchant": re.compile(r"enchant", re.I),
-    "pseudo": re.compile(r"pseudo", re.I),
-}
-
-
-def load_json(path: Path) -> Any:
-    with path.open("r", encoding="utf-8") as f:
-        return json.load(f)
-
-
-def normalize(text: str) -> str:
-    return re.sub(r"\s+", " ", text).strip().lower()
-
-
-def keyword_matches(text: str) -> list[str]:
-    value = normalize(text)
-    return [k for k in KEYWORDS if k in value]
-
-
-def category_for(label: str) -> str:
-    for name, pattern in CATEGORY_HINTS.items():
-        if pattern.search(label):
-            return name
-    return "other"
-
-
-def extract_entries(payload: Any) -> list[dict[str, Any]]:
-    if isinstance(payload, dict):
-        groups = payload.get("result", [])
-    elif isinstance(payload, list):
-        groups = payload
-    else:
-        groups = []
-
-    if not isinstance(groups, list):
-        raise ValueError("poe2_stats.json 的 result 不是数组")
-
-    output: list[dict[str, Any]] = []
-
-    for group in groups:
-        if not isinstance(group, dict):
-            continue
-
-        label = str(group.get("label", ""))
-        entries = group.get("entries", [])
-        if not isinstance(entries, list):
-            continue
-
-        for entry in entries:
-            if not isinstance(entry, dict):
-                continue
-
-            stat_id = entry.get("id")
-            text = entry.get("text")
-
-            # Trade IDs are the critical output. Ignore malformed entries.
-            if not isinstance(stat_id, str) or not stat_id.strip():
-                continue
-            if not isinstance(text, str) or not text.strip():
-                continue
-
-            matches = keyword_matches(text)
-            if not matches:
-                # Also inspect option labels when a stat uses a selectable value.
-                option = entry.get("option")
-                option_text = ""
-                if isinstance(option, dict):
-                    option_text = " ".join(
-                        str(v) for v in option.values() if isinstance(v, (str, int, float))
-                    )
-                matches = keyword_matches(f"{text} {option_text}")
-
-            if not matches:
-                continue
-
-            item = {
-                "id": stat_id,
-                "text": text,
-                "group": label,
-                "category": category_for(label),
-                "tablet_match_keywords": matches,
-            }
-
-            # Preserve useful upstream fields without copying arbitrary payload.
-            for key in ("type", "option", "disabled"):
-                if key in entry:
-                    item[key] = entry[key]
-
-            output.append(item)
-
-    # Deduplicate by Trade stat ID while preserving first occurrence.
-    seen: set[str] = set()
-    deduped: list[dict[str, Any]] = []
-    for item in output:
-        if item["id"] in seen:
-            continue
-        seen.add(item["id"])
-        deduped.append(item)
-
-    return deduped
-
-
-def build_summary(stats: list[dict[str, Any]]) -> dict[str, Any]:
-    by_category: dict[str, int] = {}
-    by_group: dict[str, int] = {}
-
-    for stat in stats:
-        by_category[stat["category"]] = by_category.get(stat["category"], 0) + 1
-        group = stat["group"]
-        by_group[group] = by_group.get(group, 0) + 1
-
-    return {
-        "input": str(INPUT.relative_to(BASE_DIR)),
-        "output": str(OUTPUT.relative_to(BASE_DIR)),
-        "count": len(stats),
-        "by_category": dict(sorted(by_category.items())),
-        "by_group": dict(sorted(by_group.items())),
-        "keywords": list(KEYWORDS),
-    }
-
-
-def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--input", type=Path, default=INPUT)
-    parser.add_argument("--output", type=Path, default=OUTPUT)
-    args = parser.parse_args()
-
-    input_path = args.input if args.input.is_absolute() else BASE_DIR / args.input
-    output_path = args.output if args.output.is_absolute() else BASE_DIR / args.output
-    summary_path = output_path.with_name("tablet_stats_summary.json")
-
-    if not input_path.exists():
-        print(f"ERROR: 找不到输入文件: {input_path}")
-        print("请先运行 fetch_poe2_data.py，或把已经获取的 poe2_stats.json 放进 data/。")
-        return 2
-
-    payload = load_json(input_path)
-    stats = extract_entries(payload)
-    summary = build_summary(stats)
-
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    with output_path.open("w", encoding="utf-8") as f:
-        json.dump(
-            {
-                "version": 1,
-                "source": "PoE2 Trade API /api/trade2/data/stats",
-                "count": len(stats),
-                "stats": stats,
-            },
-            f,
-            ensure_ascii=False,
-            indent=2,
-        )
-
-    with summary_path.open("w", encoding="utf-8") as f:
-        json.dump(summary, f, ensure_ascii=False, indent=2)
-
-    print("=" * 70)
-    print("PoE2 Tablet Stats Extractor")
-    print("=" * 70)
-    print(f"输入: {input_path}")
-    print(f"输出: {output_path}")
-    print(f"提取数量: {len(stats)}")
-    print()
-    print("分类:")
-    for key, value in summary["by_category"].items():
-        print(f"  {key}: {value}")
-    print()
-    print("前 20 条:")
-    for stat in stats[:20]:
-        print(f"  [{stat['id']}] {stat['text']}")
-    print()
-    print(f"摘要: {summary_path}")
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+# Tower modifier descriptions. A stat is accepted only when it matches this
+# whitelist; words like map/waystone/boss alone are never used for discovery.
+PATTERNS=[
+"(8-12)% increased Rarity of Items found in Map","Map has (30-40)% increased Magic Monsters","Map has (25-35)% increased number of Rare Monsters","Map has (15-20)% increased Monster Rarity","Map contains (2-3) additional Rare Chests","Unique Monsters have 1 additional Rare Modifiers",
+"Unstable Breaches in Map spawn (1-2) additional Rare Monsters when Stabilised","(5-20)% increased Effectiveness of Rare Breach Monsters in Map","(15-30)% increased Quantity of Breach Splinters dropped by Breach Monsters in Map","(30-60)% increased Quantity of Hiveblood found in Map","(30-60)% increased Quantity of Wombgifts found in Map",
+"(25-35)% increased number of Rare Expedition Monsters in Map","The first (1-2) unearthed Runic Monsters will be Rare Monsters in Map","(15-25)% increased Expedition Monster Rarity in Map","(15-25)% increased Quantity of Expedition Logbooks dropped by Runic Monsters in Map","(15-30)% increased quantity of Expedition Artifacts dropped by Monsters in Map","Expeditions contain (1-2) Additional Bosses encased in ice in Map",
+"Slaying Rare Monsters in Map pauses the Delirium Mirror Timer for (3-5) seconds","Delirium Encounters in Map are (15-30)% more likely to spawn Unique Bosses",
+"Revived Monsters from Ritual Altars in Map have (35-70)% increased chance to be Magic","Revived Monsters from Ritual Altars in Map have (25-40)% increased chance to be Rare",
+"(18-30)% increased Quantity of Waystones dropped by Map Bosses","(13-20)% increased Quantity of Items dropped by Map Bosses","(40-80)% increased Experience gained from Map Bosses","(35-60)% increased Rarity of Items dropped by Map Bosses",
+"(2-3) additional Rare Monsters are spawned from Abysses in Map","(10-25)% chance to add a Vaal Beacon Unique Monster to the Map","(30-60)% increased chance Vaal Beacon Chests are Rare in Map",
+"(4-10)% increased Quantity of Items found in Map","(30-40)% increased Quantity of Waystones found in Map","% reduced Pack Size in Map","% increased Quantity of Waystones found in Map","Map contains 1 additional Shrines","Map contains 1 additional Strongboxes","Map contains 1 additional Essences","Map contains 1 additional Azmeri Spirits","Map is inhabited by 1 additional Rogue Exiles",
+]
+UNIQUE=[
+"Breach Hives in Map have (2-5) additional waves of Hiveborn Monsters","Breaches in Map have (-10-20)% reduced Pack Size","Unstable Breaches in Map take 120 additional seconds to collapse after timer is filled","Unstable Breaches in Map spawn (2-5) additional Rare Monsters when Stabilised",
+"Expedition Monsters in your Maps spawn with half of their Life missing","Runic Monsters in your Maps are Duplicated","Favours at Ritual Altars in Area costs (10-15)% increased Tribute","Can Reroll Favours at Ritual Altars in your Maps twice as many times",
+"Map Bosses are Hunted by Azmeri Spirits","Map Bosses have 1 additional Modifiers","Can only be applied to Precursor Tower Maps","Completing the Tower makes all nearby Maps accessible","If the Map has not been Irradiated, it becomes Irradiated when completed",
+"Map also counts as a Water Area","Map also counts as a Mountain Area","Map also counts as a Grass Area","Map also counts as a Forest Area","Map also counts as a Swamp Area",
+"% more Waystones found in Area","additional Rare Monsters are spawned from Abysses in Map","Map contains (14-18) additional Abysses","Map is overrun by the Abyssal"
+]
+def norm(s): return re.sub(r"\s+"," ",s.replace("—","-").replace("–","-")).strip().lower()
+def eq(a,b): a,b=norm(a),norm(b); return a==b or a in b or b in a
+def load(p):
+    with p.open(encoding="utf-8") as f:return json.load(f)
+def main():
+    ap=argparse.ArgumentParser(); ap.add_argument("--input",type=Path,default=INPUT); ap.add_argument("--output",type=Path,default=OUTPUT); a=ap.parse_args()
+    inp=a.input if a.input.is_absolute() else BASE/a.input; out=a.output if a.output.is_absolute() else BASE/a.output
+    if not inp.exists(): print("ERROR: missing",inp); return 2
+    payload=load(inp); groups=payload.get("result",[]) if isinstance(payload,dict) else payload
+    entries=[]
+    for g in groups:
+        if not isinstance(g,dict): continue
+        for e in g.get("entries",[]) or []:
+            if isinstance(e,dict) and isinstance(e.get("id"),str) and isinstance(e.get("text"),str):
+                entries.append({**e,"group":g.get("label","")})
+    catalog=[]; found={}; stats=[]
+    for kind,patterns in (("tower",PATTERNS),("unique_tablet",UNIQUE)):
+        for p in patterns:
+            ids=[e["id"] for e in entries if eq(p,e["text"])]
+            catalog.append({"pattern":p,"kind":kind,"matched_trade_ids":ids,"matched":bool(ids)})
+            for e in entries:
+                if eq(p,e["text"]) and e["id"] not in found:
+                    x={k:e[k] for k in ("id","text","group","type","option","disabled") if k in e}; x["tablet_kind"]=kind; x["source_pattern"]=p; found[e["id"]]=x
+    stats=list(found.values())
+    out.parent.mkdir(parents=True,exist_ok=True)
+    with out.open("w",encoding="utf-8") as f: json.dump({"version":2,"source":"PoE2 Trade API /api/trade2/data/stats","domain":"Tablet / Tower","count":len(stats),"stats":stats},f,ensure_ascii=False,indent=2)
+    summary={"version":2,"method":"PoE2DB Tower whitelist -> Trade stat text -> original Trade stat ID","count":len(stats),"matched_patterns":sum(x["matched"] for x in catalog),"unmatched_patterns":[x["pattern"] for x in catalog if not x["matched"]],"tower_patterns":len(PATTERNS),"unique_patterns":len(UNIQUE),"trade_groups":sorted(set(e["group"] for e in stats))}
+    with SUMMARY.open("w",encoding="utf-8") as f: json.dump(summary,f,ensure_ascii=False,indent=2)
+    with CATALOG.open("w",encoding="utf-8") as f: json.dump({"version":1,"entries":catalog},f,ensure_ascii=False,indent=2)
+    print(f"Trade entries: {len(entries)}; Tablet/Tower IDs: {len(stats)}; matched: {summary['matched_patterns']}/{len(catalog)}")
+    for p in summary["unmatched_patterns"]: print("UNMATCHED:",p)
+if __name__=="__main__": raise SystemExit(main())
