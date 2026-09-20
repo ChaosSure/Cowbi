@@ -1,0 +1,32 @@
+[
+  {
+    "group_id": "pseudo",
+    "group_label": "Pseudo",
+    "id": "pseudo.pseudo_number_of_uses_remaining",
+    "text": "# uses remaining (Tablets)",
+    "type": "pseudo",
+    "matched_keywords": [
+      "tablet"
+    ]
+  },
+  {
+    "group_id": "explicit",
+    "group_label": "Explicit",
+    "id": "explicit.stat_3418590244",
+    "text": "Can only be applied to Precursor Tower Maps\nCompleting the Tower makes all nearby Maps accessible",
+    "type": "explicit",
+    "matched_keywords": [
+      "precursor"
+    ]
+  },
+  {
+    "group_id": "enchant",
+    "group_label": "Enchant",
+    "id": "enchant.stat_3138466258",
+    "text": "#% increased Tablets found in Area",
+    "type": "enchant",
+    "matched_keywords": [
+      "tablet"
+    ]
+  }
+]
