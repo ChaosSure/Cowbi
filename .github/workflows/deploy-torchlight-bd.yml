@@ -28,11 +28,12 @@ jobs:
         uses: actions/checkout@v4
       - name: Configure Pages
         uses: actions/configure-pages@v5
+        with:
+          enablement: true
       - name: Upload site artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # Publish the repository tree so the existing root files remain available.
-          # The BD app is served from /Cowbi/torchlight-bd/ without replacing index.html.
+          # Publish the repository tree to preserve existing root files.
           path: .
       - name: Deploy to GitHub Pages
         id: deployment
