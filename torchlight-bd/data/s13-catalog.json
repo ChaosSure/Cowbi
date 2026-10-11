@@ -12,16 +12,8 @@
       "url": "https://tlidb.com/cn/Afterlight_Season"
     },
     {
-      "name": "火炬编年史：碎梦",
-      "url": "https://tlidb.com/cn/Broken_Dream"
-    },
-    {
-      "name": "火炬编年史：缄默咏叹",
-      "url": "https://tlidb.com/cn/Silent_Aria"
-    },
-    {
-      "name": "火炬编年史：三圣",
-      "url": "https://tlidb.com/cn/The_Three_Saints"
+      "name": "火炬编年史：蚀骨之寒（包含碎梦装备资料）",
+      "url": "https://tlidb.com/cn/Biting_Cold"
     },
     {
       "name": "火炬编年史：永恒",
@@ -30,6 +22,10 @@
     {
       "name": "火炬编年史：灵魂交错",
       "url": "https://tlidb.com/cn/Interlocking_Soul"
+    },
+    {
+      "name": "火炬编年史：装备词缀资料",
+      "url": "https://tlidb.com/cn/Vorax_Limb%3A_Hands"
     }
   ],
   "items": [
@@ -106,7 +102,7 @@
         {
           "stat": "custom",
           "value": 0,
-          "custom": "每拥有 21–27% 有效元素抗性，+1 对应元素技能等级"
+          "custom": "每拥有 30–36% 有效元素抗性，+1 对应元素技能等级（需以当前游戏内词条复核）"
         }
       ]
     },
