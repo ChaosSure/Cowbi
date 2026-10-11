@@ -14,7 +14,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: "pages-torchlight-bd"
+  group: "pages-cowbi"
   cancel-in-progress: true
 
 jobs:
@@ -31,7 +31,9 @@ jobs:
       - name: Upload site artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: torchlight-bd
+          # Publish the repository tree so the existing root files remain available.
+          # The BD app is served from /Cowbi/torchlight-bd/ without replacing index.html.
+          path: .
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
