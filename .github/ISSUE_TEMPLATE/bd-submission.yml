@@ -1,0 +1,92 @@
+name: 火炬之光：无限 BD 投稿
+description: 提交一套 BD，审核通过后会收录到公共收藏库
+title: "[BD 投稿] "
+labels:
+  - bd-submission
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢投稿！请尽量填写完整信息。提交后会由仓库管理员审核；审核通过后才会加入公共 BD 数据库。
+  - type: input
+    id: name
+    attributes:
+      label: BD 名称
+      description: 请写清流派 / 核心技能名称
+      placeholder: 例如：某英雄 - 某技能开荒 BD
+    validations:
+      required: true
+  - type: input
+    id: season
+    attributes:
+      label: 赛季 / 版本
+      placeholder: 例如：当前赛季名称
+    validations:
+      required: true
+  - type: input
+    id: hero
+    attributes:
+      label: 英雄 / 英雄特性
+    validations:
+      required: true
+  - type: input
+    id: skill
+    attributes:
+      label: 核心技能 / 流派
+    validations:
+      required: true
+  - type: input
+    id: budget
+    attributes:
+      label: 预算 / 造价
+      placeholder: 例如：低造价、约 X 火
+  - type: dropdown
+    id: tier
+    attributes:
+      label: 主要用途
+      options:
+        - 开荒
+        - 刷图
+        - 打王
+        - 冲层
+        - 全能
+        - 其他
+    validations:
+      required: true
+  - type: textarea
+    id: mechanics
+    attributes:
+      label: 核心机制 / 玩法思路
+      description: 伤害来源、操作循环、优缺点
+    validations:
+      required: true
+  - type: textarea
+    id: gear
+    attributes:
+      label: 装备与关键词条
+      description: 核心装备、必备词条、替代方案
+    validations:
+      required: true
+  - type: textarea
+    id: skills
+    attributes:
+      label: 技能 / 天赋 / 契灵等配置
+      description: 请尽量提供完整配置或相关链接
+  - type: textarea
+    id: content
+    attributes:
+      label: 实战表现 / 升级路线
+  - type: input
+    id: guide
+    attributes:
+      label: 攻略 / 视频 / 配置分享链接
+      description: 请使用公开可访问的 URL
+  - type: textarea
+    id: image
+    attributes:
+      label: 截图链接
+      description: 请粘贴可公开访问的图片链接；不要上传敏感信息
+  - type: textarea
+    id: notes
+    attributes:
+      label: 补充说明 / 来源
