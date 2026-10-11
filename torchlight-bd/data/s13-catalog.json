@@ -1,0 +1,187 @@
+{
+  "format": "cowbi-tli-catalog",
+  "version": 1,
+  "season": "SS13",
+  "seasonName": "守夜",
+  "status": "partial",
+  "updated": "2026-10-11",
+  "note": "这是第一批已核对的 SS13 传奇装备索引，不是完整装备库。范围词缀默认值为 0，必须按角色实际装备数值手动填写；不把范围中值当成真实属性。",
+  "sources": [
+    {
+      "name": "火炬编年史：SS13 守夜赛季",
+      "url": "https://tlidb.com/cn/Afterlight_Season"
+    },
+    {
+      "name": "火炬编年史：碎梦",
+      "url": "https://tlidb.com/cn/Broken_Dream"
+    },
+    {
+      "name": "火炬编年史：缄默咏叹",
+      "url": "https://tlidb.com/cn/Silent_Aria"
+    },
+    {
+      "name": "火炬编年史：三圣",
+      "url": "https://tlidb.com/cn/The_Three_Saints"
+    },
+    {
+      "name": "火炬编年史：永恒",
+      "url": "https://tlidb.com/cn/Eternity"
+    },
+    {
+      "name": "火炬编年史：灵魂交错",
+      "url": "https://tlidb.com/cn/Interlocking_Soul"
+    }
+  ],
+  "items": [
+    {
+      "name": "碎梦",
+      "rarity": "传奇",
+      "base": "待补充底材",
+      "slot": "helmet",
+      "description": "需求等级 30；冰结值上限与冰冷渗透相关效果。",
+      "affixes": [
+        {
+          "stat": "life",
+          "value": 0,
+          "custom": "最大生命：70–90（请按实际装备填写）"
+        },
+        {
+          "stat": "custom",
+          "value": 0,
+          "custom": "冰结值上限：+10–15"
+        },
+        {
+          "stat": "custom",
+          "value": 0,
+          "custom": "对受到蚀骨之寒诅咒的敌人施加冰冷渗透"
+        }
+      ]
+    },
+    {
+      "name": "缄默咏叹",
+      "rarity": "传奇",
+      "base": "待补充底材",
+      "slot": "necklace",
+      "description": "需求等级 45；暴击无法造成额外伤害。",
+      "affixes": [
+        {
+          "stat": "intelligence",
+          "value": 0,
+          "custom": "智慧：+40–50"
+        },
+        {
+          "stat": "custom",
+          "value": 0,
+          "custom": "收割时间：+40–50%"
+        },
+        {
+          "stat": "critRating",
+          "value": 0,
+          "custom": "暴击值：+90–120%"
+        },
+        {
+          "stat": "custom",
+          "value": 0,
+          "custom": "暴击无法造成额外伤害"
+        }
+      ]
+    },
+    {
+      "name": "三圣",
+      "rarity": "传奇",
+      "base": "待补充底材",
+      "slot": "custom",
+      "description": "元素抗性上限、元素抗性与元素技能等级联动。",
+      "affixes": [
+        {
+          "stat": "custom",
+          "value": 0,
+          "custom": "元素抗性上限：-3% 至 +3%"
+        },
+        {
+          "stat": "custom",
+          "value": 0,
+          "custom": "元素抗性：-6% 至 +6%"
+        },
+        {
+          "stat": "custom",
+          "value": 0,
+          "custom": "每拥有 21–27% 有效元素抗性，+1 对应元素技能等级"
+        }
+      ]
+    },
+    {
+      "name": "永恒",
+      "rarity": "传奇",
+      "base": "云游者护腰",
+      "slot": "belt",
+      "description": "击败敌人时有概率获得多种永恒层数。",
+      "affixes": [
+        {
+          "stat": "life",
+          "value": 0,
+          "custom": "最大生命：+160–220"
+        },
+        {
+          "stat": "custom",
+          "value": 0,
+          "custom": "击败时有 50% 几率获得永恒斗志，层数上限 120–200"
+        },
+        {
+          "stat": "custom",
+          "value": 0,
+          "custom": "击败时有 50% 几率获得永恒梦魇，层数上限 120–200"
+        },
+        {
+          "stat": "custom",
+          "value": 0,
+          "custom": "击败时有 50% 几率获得永恒虚影，层数上限 120–200"
+        },
+        {
+          "stat": "custom",
+          "value": 0,
+          "custom": "击败时有 50% 几率获得永恒守护，层数上限 120–200"
+        }
+      ]
+    },
+    {
+      "name": "灵魂交错",
+      "rarity": "传奇",
+      "base": "祷祝之锤",
+      "slot": "weapon",
+      "description": "召唤流传奇武器；底材基础属性需在装备内单独核对。",
+      "affixes": [
+        {
+          "stat": "custom",
+          "value": 0,
+          "custom": "力量与智慧：+16–20"
+        },
+        {
+          "stat": "custom",
+          "value": 0,
+          "custom": "召唤物伤害：+120–150%"
+        },
+        {
+          "stat": "custom",
+          "value": 0,
+          "custom": "召唤物最大生命：+20–30%"
+        },
+        {
+          "stat": "custom",
+          "value": 0,
+          "custom": "召唤物持续时间：+20–30%"
+        },
+        {
+          "stat": "custom",
+          "value": 0,
+          "custom": "使用召唤技能时，消耗 5% 最大生命"
+        },
+        {
+          "stat": "custom",
+          "value": 0,
+          "custom": "召唤物每秒自然回复 3% 生命"
+        }
+      ]
+    }
+  ]
+}
