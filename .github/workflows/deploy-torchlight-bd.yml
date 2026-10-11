@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
     paths:
+      - "index.html"
       - "torchlight-bd/**"
       - ".github/workflows/deploy-torchlight-bd.yml"
   workflow_dispatch:
